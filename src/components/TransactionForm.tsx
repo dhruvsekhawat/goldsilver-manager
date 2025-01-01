@@ -24,15 +24,15 @@ interface TransactionFormProps {
 }
 
 export interface Transaction {
-  id: string;
+  id?: string;
   type: "buy" | "sell";
   metal: "gold" | "silver";
   weight: number;
   price: number;
   date: string;
-  remainingWeight?: number; // For buy transactions
-  soldFrom?: string[]; // For sell transactions, references buy transaction IDs
-  profit?: number; // For sell transactions
+  remainingWeight?: number;
+  soldFrom?: string[];
+  profit?: number;
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -64,14 +64,18 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
+    // Convert weight based on metal type
+    const weightInGrams = metal === "gold" 
+      ? parseFloat(weight) * 10 // Convert 10g units to grams
+      : parseFloat(weight) * 1000; // Convert kg to grams
+
     const transaction: Transaction = {
-      id: Date.now().toString(),
       type,
       metal,
-      weight: parseFloat(weight),
-      price: parseFloat(price),
+      weight: weightInGrams,
+      price: metal === "gold" ? parseFloat(price) / 10 : parseFloat(price) / 1000,
       date: date.toISOString(),
-      ...(type === "buy" ? { remainingWeight: parseFloat(weight) } : {}),
+      ...(type === "buy" ? { remainingWeight: weightInGrams } : {}),
     };
 
     onSubmit(transaction);
@@ -138,26 +142,26 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="weight">Weight (g)</Label>
+          <Label htmlFor="weight">Qty</Label>
           <Input
             id="weight"
             type="number"
             step="0.01"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
-            placeholder="Enter weight"
+            placeholder={metal === "gold" ? "Enter quantity (10g units)" : "Enter quantity (kg)"}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="price">Price per gram</Label>
+          <Label htmlFor="price">Rate</Label>
           <Input
             id="price"
             type="number"
             step="0.01"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            placeholder="Enter price"
+            placeholder={metal === "gold" ? "Price per 10g" : "Price per kg"}
           />
         </div>
       </div>

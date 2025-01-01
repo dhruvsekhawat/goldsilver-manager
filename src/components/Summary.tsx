@@ -6,6 +6,35 @@ interface SummaryProps {
   transactions: Transaction[];
 }
 
+// Helper function to format currency in Indian format
+const formatIndianCurrency = (amount: number): string => {
+  const formatter = new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+  return formatter.format(amount);
+};
+
+// Helper function to format weight based on metal type
+const formatWeight = (weight: number, metal: "gold" | "silver"): string => {
+  if (metal === "gold") {
+    return `${(weight / 10).toFixed(2)}`;
+  } else {
+    return `${(weight / 1000).toFixed(2)}`;
+  }
+};
+
+// Helper function to format price per unit
+const formatPricePerUnit = (price: number, metal: "gold" | "silver"): string => {
+  if (metal === "gold") {
+    return formatIndianCurrency(price * 10);
+  } else {
+    return formatIndianCurrency(price * 1000);
+  }
+};
+
 export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
   const calculateMetalStats = (metal: "gold" | "silver") => {
     const metalTransactions = transactions.filter((t) => t.metal === metal);
@@ -40,11 +69,11 @@ export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
           <CardTitle className="text-lg">Gold Summary</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p>Current Inventory: {goldStats.currentInventory.toFixed(2)}g</p>
-          <p>Total Buy Value: ${goldStats.totalBuyValue.toFixed(2)}</p>
-          <p>Total Sell Value: ${goldStats.totalSellValue.toFixed(2)}</p>
-          <p>Avg. Buy Rate: ${goldStats.averageBuyRate.toFixed(2)}/g</p>
-          <p>Total Profit: ${goldStats.totalProfit.toFixed(2)}</p>
+          <p>Current Stock: {formatWeight(goldStats.currentInventory, "gold")}</p>
+          <p>Total Buy Value: {formatIndianCurrency(goldStats.totalBuyValue)}</p>
+          <p>Total Sell Value: {formatIndianCurrency(goldStats.totalSellValue)}</p>
+          <p>Rate: {formatPricePerUnit(goldStats.averageBuyRate, "gold")}</p>
+          <p>Total Profit: {formatIndianCurrency(goldStats.totalProfit)}</p>
         </CardContent>
       </Card>
 
@@ -53,11 +82,11 @@ export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
           <CardTitle className="text-lg">Silver Summary</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p>Current Inventory: {silverStats.currentInventory.toFixed(2)}g</p>
-          <p>Total Buy Value: ${silverStats.totalBuyValue.toFixed(2)}</p>
-          <p>Total Sell Value: ${silverStats.totalSellValue.toFixed(2)}</p>
-          <p>Avg. Buy Rate: ${silverStats.averageBuyRate.toFixed(2)}/g</p>
-          <p>Total Profit: ${silverStats.totalProfit.toFixed(2)}</p>
+          <p>Current Stock: {formatWeight(silverStats.currentInventory, "silver")}</p>
+          <p>Total Buy Value: {formatIndianCurrency(silverStats.totalBuyValue)}</p>
+          <p>Total Sell Value: {formatIndianCurrency(silverStats.totalSellValue)}</p>
+          <p>Rate: {formatPricePerUnit(silverStats.averageBuyRate, "silver")}</p>
+          <p>Total Profit: {formatIndianCurrency(silverStats.totalProfit)}</p>
         </CardContent>
       </Card>
 
@@ -66,9 +95,9 @@ export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
           <CardTitle className="text-lg">Total Summary</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p>Total Buy Value: ${(goldStats.totalBuyValue + silverStats.totalBuyValue).toFixed(2)}</p>
-          <p>Total Sell Value: ${(goldStats.totalSellValue + silverStats.totalSellValue).toFixed(2)}</p>
-          <p>Total Profit: ${(goldStats.totalProfit + silverStats.totalProfit).toFixed(2)}</p>
+          <p>Total Buy Value: {formatIndianCurrency(goldStats.totalBuyValue + silverStats.totalBuyValue)}</p>
+          <p>Total Sell Value: {formatIndianCurrency(goldStats.totalSellValue + silverStats.totalSellValue)}</p>
+          <p>Total Profit: {formatIndianCurrency(goldStats.totalProfit + silverStats.totalProfit)}</p>
         </CardContent>
       </Card>
     </div>
