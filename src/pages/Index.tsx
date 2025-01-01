@@ -1,11 +1,13 @@
 import React from "react";
-import { TransactionForm, Transaction } from "@/components/TransactionForm";
-import { TransactionList } from "@/components/TransactionList";
+import { Transaction } from "@/components/TransactionForm";
 import { Summary } from "@/components/Summary";
 import { ProfileSelector } from "@/components/ProfileSelector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MetalTransactionView } from "@/components/MetalTransactionView";
+import { useToast } from "@/components/ui/use-toast";
 
 const Index = () => {
+  const { toast } = useToast();
   const [currentProfile, setCurrentProfile] = React.useState<string>(() => {
     const savedProfile = localStorage.getItem("currentProfile");
     return savedProfile || "Default";
@@ -24,7 +26,10 @@ const Index = () => {
   React.useEffect(() => {
     localStorage.setItem("currentProfile", currentProfile);
     localStorage.setItem("profiles", JSON.stringify(profiles));
-    localStorage.setItem(`transactions_${currentProfile}`, JSON.stringify(transactions));
+    localStorage.setItem(
+      `transactions_${currentProfile}`,
+      JSON.stringify(transactions)
+    );
   }, [currentProfile, profiles, transactions]);
 
   const handleProfileChange = (profile: string) => {
@@ -47,9 +52,13 @@ const Index = () => {
       };
     }
 
-    // For sell transactions, implement FIFO logic
     const availableBuyTransactions = [...transactions]
-      .filter(t => t.type === "buy" && t.metal === newTransaction.metal && (t.remainingWeight || 0) > 0)
+      .filter(
+        (t) =>
+          t.type === "buy" &&
+          t.metal === newTransaction.metal &&
+          (t.remainingWeight || 0) > 0
+      )
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     let remainingToSell = newTransaction.weight;
@@ -60,14 +69,16 @@ const Index = () => {
     for (const buyTx of availableBuyTransactions) {
       if (remainingToSell <= 0) break;
 
-      const buyTxIndex = updatedBuyTransactions.findIndex(t => t.id === buyTx.id);
+      const buyTxIndex = updatedBuyTransactions.findIndex(
+        (t) => t.id === buyTx.id
+      );
       const available = buyTx.remainingWeight || 0;
       const used = Math.min(available, remainingToSell);
-      
+
       totalCost += used * buyTx.price;
       remainingToSell -= used;
       soldFrom.push(buyTx.id);
-      
+
       updatedBuyTransactions[buyTxIndex] = {
         ...buyTx,
         remainingWeight: available - used,
@@ -75,6 +86,11 @@ const Index = () => {
     }
 
     if (remainingToSell > 0) {
+      toast({
+        title: "Error",
+        description: "Not enough inventory for this sale",
+        variant: "destructive",
+      });
       throw new Error("Not enough inventory for this sale");
     }
 
@@ -91,12 +107,17 @@ const Index = () => {
   };
 
   const handleAddTransaction = (transaction: Transaction) => {
-    const processedTransaction = calculateFIFO(transaction);
-    setTransactions(prev => [...prev, processedTransaction]);
-  };
-
-  const filterTransactions = (metal: "gold" | "silver") => {
-    return transactions.filter((t) => t.metal === metal);
+    try {
+      const processedTransaction = calculateFIFO(transaction);
+      setTransactions((prev) => [...prev, processedTransaction]);
+      toast({
+        title: "Success",
+        description: "Transaction added successfully",
+      });
+    } catch (error) {
+      // Error toast is already shown in calculateFIFO
+      return;
+    }
   };
 
   return (
@@ -120,64 +141,20 @@ const Index = () => {
             <TabsTrigger value="silver">Silver</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="gold" className="space-y-8">
-            <div className="grid gap-8 md:grid-cols-[2fr,3fr]">
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Add Gold Transaction</h2>
-                <TransactionForm
-                  onSubmit={handleAddTransaction}
-                  defaultMetal="gold"
-                />
-              </div>
-              <div>
-                <Tabs defaultValue="all">
-                  <TabsList>
-                    <TabsTrigger value="all">All</TabsTrigger>
-                    <TabsTrigger value="buy">Buy</TabsTrigger>
-                    <TabsTrigger value="sell">Sell</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="all">
-                    <TransactionList transactions={filterTransactions("gold")} filter="all" />
-                  </TabsContent>
-                  <TabsContent value="buy">
-                    <TransactionList transactions={filterTransactions("gold")} filter="buy" />
-                  </TabsContent>
-                  <TabsContent value="sell">
-                    <TransactionList transactions={filterTransactions("gold")} filter="sell" />
-                  </TabsContent>
-                </Tabs>
-              </div>
-            </div>
+          <TabsContent value="gold">
+            <MetalTransactionView
+              metal="gold"
+              transactions={transactions}
+              onAddTransaction={handleAddTransaction}
+            />
           </TabsContent>
 
-          <TabsContent value="silver" className="space-y-8">
-            <div className="grid gap-8 md:grid-cols-[2fr,3fr]">
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Add Silver Transaction</h2>
-                <TransactionForm
-                  onSubmit={handleAddTransaction}
-                  defaultMetal="silver"
-                />
-              </div>
-              <div>
-                <Tabs defaultValue="all">
-                  <TabsList>
-                    <TabsTrigger value="all">All</TabsTrigger>
-                    <TabsTrigger value="buy">Buy</TabsTrigger>
-                    <TabsTrigger value="sell">Sell</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="all">
-                    <TransactionList transactions={filterTransactions("silver")} filter="all" />
-                  </TabsContent>
-                  <TabsContent value="buy">
-                    <TransactionList transactions={filterTransactions("silver")} filter="buy" />
-                  </TabsContent>
-                  <TabsContent value="sell">
-                    <TransactionList transactions={filterTransactions("silver")} filter="sell" />
-                  </TabsContent>
-                </Tabs>
-              </div>
-            </div>
+          <TabsContent value="silver">
+            <MetalTransactionView
+              metal="silver"
+              transactions={transactions}
+              onAddTransaction={handleAddTransaction}
+            />
           </TabsContent>
         </Tabs>
       </div>
