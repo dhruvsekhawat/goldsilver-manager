@@ -10,6 +10,13 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface TransactionFormProps {
   onSubmit: (transaction: Transaction) => void;
@@ -23,6 +30,9 @@ export interface Transaction {
   weight: number;
   price: number;
   date: string;
+  remainingWeight?: number; // For buy transactions
+  soldFrom?: string[]; // For sell transactions, references buy transaction IDs
+  profit?: number; // For sell transactions
 }
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
@@ -34,6 +44,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [metal, setMetal] = React.useState<"gold" | "silver">(defaultMetal || "gold");
   const [weight, setWeight] = React.useState("");
   const [price, setPrice] = React.useState("");
+  const [date, setDate] = React.useState<Date>(new Date());
 
   React.useEffect(() => {
     if (defaultMetal) {
@@ -59,7 +70,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       metal,
       weight: parseFloat(weight),
       price: parseFloat(price),
-      date: new Date().toISOString(),
+      date: date.toISOString(),
+      ...(type === "buy" ? { remainingWeight: parseFloat(weight) } : {}),
     };
 
     onSubmit(transaction);
@@ -102,6 +114,28 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             </Select>
           </div>
         )}
+
+        <div className="space-y-2">
+          <Label>Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-start text-left font-normal"
+              >
+                {format(date, "PPP")}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(date) => date && setDate(date)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="weight">Weight (g)</Label>

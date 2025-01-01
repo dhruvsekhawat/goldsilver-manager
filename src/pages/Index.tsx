@@ -39,8 +39,60 @@ const Index = () => {
     setTransactions([]);
   };
 
+  const calculateFIFO = (newTransaction: Transaction): Transaction => {
+    if (newTransaction.type === "buy") {
+      return {
+        ...newTransaction,
+        remainingWeight: newTransaction.weight,
+      };
+    }
+
+    // For sell transactions, implement FIFO logic
+    const availableBuyTransactions = [...transactions]
+      .filter(t => t.type === "buy" && t.metal === newTransaction.metal && (t.remainingWeight || 0) > 0)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let remainingToSell = newTransaction.weight;
+    let totalCost = 0;
+    const soldFrom: string[] = [];
+    const updatedBuyTransactions = [...transactions];
+
+    for (const buyTx of availableBuyTransactions) {
+      if (remainingToSell <= 0) break;
+
+      const buyTxIndex = updatedBuyTransactions.findIndex(t => t.id === buyTx.id);
+      const available = buyTx.remainingWeight || 0;
+      const used = Math.min(available, remainingToSell);
+      
+      totalCost += used * buyTx.price;
+      remainingToSell -= used;
+      soldFrom.push(buyTx.id);
+      
+      updatedBuyTransactions[buyTxIndex] = {
+        ...buyTx,
+        remainingWeight: available - used,
+      };
+    }
+
+    if (remainingToSell > 0) {
+      throw new Error("Not enough inventory for this sale");
+    }
+
+    const revenue = newTransaction.weight * newTransaction.price;
+    const profit = revenue - totalCost;
+
+    setTransactions(updatedBuyTransactions);
+
+    return {
+      ...newTransaction,
+      soldFrom,
+      profit,
+    };
+  };
+
   const handleAddTransaction = (transaction: Transaction) => {
-    setTransactions((prev) => [...prev, transaction]);
+    const processedTransaction = calculateFIFO(transaction);
+    setTransactions(prev => [...prev, processedTransaction]);
   };
 
   const filterTransactions = (metal: "gold" | "silver") => {
@@ -78,8 +130,22 @@ const Index = () => {
                 />
               </div>
               <div>
-                <h2 className="text-xl font-semibold mb-4">Gold Transactions</h2>
-                <TransactionList transactions={filterTransactions("gold")} />
+                <Tabs defaultValue="all">
+                  <TabsList>
+                    <TabsTrigger value="all">All</TabsTrigger>
+                    <TabsTrigger value="buy">Buy</TabsTrigger>
+                    <TabsTrigger value="sell">Sell</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="all">
+                    <TransactionList transactions={filterTransactions("gold")} filter="all" />
+                  </TabsContent>
+                  <TabsContent value="buy">
+                    <TransactionList transactions={filterTransactions("gold")} filter="buy" />
+                  </TabsContent>
+                  <TabsContent value="sell">
+                    <TransactionList transactions={filterTransactions("gold")} filter="sell" />
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
           </TabsContent>
@@ -94,8 +160,22 @@ const Index = () => {
                 />
               </div>
               <div>
-                <h2 className="text-xl font-semibold mb-4">Silver Transactions</h2>
-                <TransactionList transactions={filterTransactions("silver")} />
+                <Tabs defaultValue="all">
+                  <TabsList>
+                    <TabsTrigger value="all">All</TabsTrigger>
+                    <TabsTrigger value="buy">Buy</TabsTrigger>
+                    <TabsTrigger value="sell">Sell</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="all">
+                    <TransactionList transactions={filterTransactions("silver")} filter="all" />
+                  </TabsContent>
+                  <TabsContent value="buy">
+                    <TransactionList transactions={filterTransactions("silver")} filter="buy" />
+                  </TabsContent>
+                  <TabsContent value="sell">
+                    <TransactionList transactions={filterTransactions("silver")} filter="sell" />
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
           </TabsContent>

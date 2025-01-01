@@ -12,9 +12,17 @@ import { format } from "date-fns";
 
 interface TransactionListProps {
   transactions: Transaction[];
+  filter?: "all" | "buy" | "sell";
 }
 
-export const TransactionList: React.FC<TransactionListProps> = ({ transactions }) => {
+export const TransactionList: React.FC<TransactionListProps> = ({ 
+  transactions,
+  filter = "all"
+}) => {
+  const filteredTransactions = transactions
+    .filter(t => filter === "all" || t.type === filter)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return (
     <div className="rounded-lg border bg-white">
       <Table>
@@ -26,10 +34,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions }
             <TableHead>Weight (g)</TableHead>
             <TableHead>Price/g</TableHead>
             <TableHead>Total</TableHead>
+            {filter !== "sell" && <TableHead>Remaining</TableHead>}
+            {filter !== "buy" && <TableHead>Profit</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {transactions.map((transaction) => (
+          {filteredTransactions.map((transaction) => (
             <TableRow key={transaction.id}>
               <TableCell>{format(new Date(transaction.date), "dd/MM/yyyy")}</TableCell>
               <TableCell className={transaction.type === "buy" ? "text-green-600" : "text-red-600"}>
@@ -41,6 +51,20 @@ export const TransactionList: React.FC<TransactionListProps> = ({ transactions }
               <TableCell>{transaction.weight.toFixed(2)}</TableCell>
               <TableCell>${transaction.price.toFixed(2)}</TableCell>
               <TableCell>${(transaction.weight * transaction.price).toFixed(2)}</TableCell>
+              {filter !== "sell" && (
+                <TableCell>
+                  {transaction.type === "buy" ? 
+                    `${transaction.remainingWeight?.toFixed(2)}g` : 
+                    "-"}
+                </TableCell>
+              )}
+              {filter !== "buy" && (
+                <TableCell>
+                  {transaction.type === "sell" && transaction.profit ? 
+                    `$${transaction.profit.toFixed(2)}` : 
+                    "-"}
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>
