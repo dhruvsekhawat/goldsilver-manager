@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 interface TransactionFormProps {
   onSubmit: (transaction: Transaction) => void;
+  defaultMetal?: "gold" | "silver";
 }
 
 export interface Transaction {
@@ -24,12 +25,21 @@ export interface Transaction {
   date: string;
 }
 
-export const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit }) => {
+export const TransactionForm: React.FC<TransactionFormProps> = ({
+  onSubmit,
+  defaultMetal,
+}) => {
   const { toast } = useToast();
   const [type, setType] = React.useState<"buy" | "sell">("buy");
-  const [metal, setMetal] = React.useState<"gold" | "silver">("gold");
+  const [metal, setMetal] = React.useState<"gold" | "silver">(defaultMetal || "gold");
   const [weight, setWeight] = React.useState("");
   const [price, setPrice] = React.useState("");
+
+  React.useEffect(() => {
+    if (defaultMetal) {
+      setMetal(defaultMetal);
+    }
+  }, [defaultMetal]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,18 +88,20 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit }) =>
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="metal">Metal</Label>
-          <Select value={metal} onValueChange={(value: "gold" | "silver") => setMetal(value)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select metal" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="gold">Gold</SelectItem>
-              <SelectItem value="silver">Silver</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {!defaultMetal && (
+          <div className="space-y-2">
+            <Label htmlFor="metal">Metal</Label>
+            <Select value={metal} onValueChange={(value: "gold" | "silver") => setMetal(value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select metal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="gold">Gold</SelectItem>
+                <SelectItem value="silver">Silver</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="weight">Weight (g)</Label>
