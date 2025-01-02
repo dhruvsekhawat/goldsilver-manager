@@ -306,9 +306,16 @@ const Index = () => {
       // For sell transactions, check inventory
       if (transaction.type === "sell") {
         const metalTransactions = transactions.filter(t => t.metal === transaction.metal);
+        const originalTransaction = transactions.find(t => t.id === transaction.id);
         const totalBuyWeight = metalTransactions
           .filter(t => t.type === "buy")
-          .reduce((acc, curr) => acc + (curr.remainingWeight || 0), 0);
+          .reduce((acc, curr) => {
+            // Include all available buy weights except those used in other sales
+            const isUsedInOtherSales = transactions
+              .filter(sale => sale.type === "sell" && sale.id !== transaction.id)
+              .some(sale => sale.soldFrom?.includes(curr.id || ''));
+            return acc + (isUsedInOtherSales ? 0 : (curr.remainingWeight || 0));
+          }, 0);
 
         if (transaction.weight > totalBuyWeight) {
           toast({
@@ -320,34 +327,17 @@ const Index = () => {
         }
       }
 
-      // For buy transactions being edited, we need to check if reducing the weight would affect any sales
+      // For buy transactions being edited
       if (transaction.type === "buy") {
         const originalTransaction = transactions.find(t => t.id === transaction.id);
         if (originalTransaction) {
-          if (transaction.weight < originalTransaction.weight) {
-            // Check if this would make any sales invalid
-            const relatedSales = transactions.filter(t => 
-              t.type === "sell" && 
-              t.metal === transaction.metal && 
-              t.soldFrom?.includes(transaction.id || '')
-            );
-
-            if (relatedSales.length > 0) {
-              toast({
-                title: "Cannot Update Purchase",
-                description: "This purchase has been used in sales. Cannot reduce the quantity.",
-                variant: "destructive",
-              });
-              return;
-            }
-          }
-
-          // Calculate the difference in weight and apply it to remainingWeight
-          const weightDifference = transaction.weight - originalTransaction.weight;
-          transaction.remainingWeight = (originalTransaction.remainingWeight || 0) + weightDifference;
+          // Set the remaining weight based on how much has been sold
+          const soldAmount = originalTransaction.weight - (originalTransaction.remainingWeight || 0);
+          transaction.remainingWeight = Math.max(0, transaction.weight - soldAmount);
         }
       }
 
+      // Update the transaction in the database
       await editTransactionMutation.mutateAsync(transaction);
 
       // If it's a sell transaction, update the remaining weights
@@ -384,6 +374,7 @@ const Index = () => {
           .sort((a, b) => a.price - b.price);
 
         const newSoldFrom: string[] = [];
+        let totalCost = 0;
         for (const buyTx of availableBuyTransactions) {
           if (remainingToSell <= 0) break;
           if (!buyTx.id) continue;
@@ -398,23 +389,30 @@ const Index = () => {
               .eq('id', buyTx.id);
 
             if (error) throw error;
+            totalCost += used * buyTx.price;
             remainingToSell -= used;
             newSoldFrom.push(buyTx.id);
           }
         }
 
-        // Update the sell transaction with new soldFrom array
-        if (newSoldFrom.length > 0) {
-          const { error } = await supabase
-            .from('transactions')
-            .update({ sold_from: newSoldFrom })
-            .eq('id', transaction.id);
+        // Calculate profit
+        const totalRevenue = transaction.weight * transaction.price;
+        const profit = totalRevenue - totalCost;
 
-          if (error) throw error;
-        }
+        // Update the sell transaction with new soldFrom array and profit
+        const { error } = await supabase
+          .from('transactions')
+          .update({ 
+            sold_from: newSoldFrom,
+            profit: profit
+          })
+          .eq('id', transaction.id);
+
+        if (error) throw error;
       }
 
-      queryClient.invalidateQueries({ queryKey: ['transactions', currentProfile] });
+      // Refresh the data
+      await queryClient.invalidateQueries({ queryKey: ['transactions', currentProfile] });
     } catch (error) {
       console.error("Failed to edit transaction:", error);
       toast({
@@ -504,6 +502,8 @@ const Index = () => {
               transactions={transactions.filter(t => t.metal === "gold")} 
               metal="gold" 
               onAddTransaction={handleAddTransaction}
+              onEditTransaction={handleEditTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           </TabsContent>
 
@@ -512,6 +512,8 @@ const Index = () => {
               transactions={transactions.filter(t => t.metal === "silver")} 
               metal="silver" 
               onAddTransaction={handleAddTransaction}
+              onEditTransaction={handleEditTransaction}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           </TabsContent>
 

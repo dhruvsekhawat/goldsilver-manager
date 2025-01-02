@@ -44,6 +44,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
 
 type SortField = "date" | "type" | "metal" | "weight" | "price" | "total" | "remainingWeight" | "profit";
 type SortOrder = "asc" | "desc";
@@ -212,6 +213,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       setIsEditDialogOpen(false);
     } catch (error) {
       console.error("Failed to edit transaction:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update transaction. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 

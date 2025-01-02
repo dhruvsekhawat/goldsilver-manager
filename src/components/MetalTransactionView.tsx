@@ -9,12 +9,16 @@ interface MetalTransactionViewProps {
   metal: "gold" | "silver";
   transactions: Transaction[];
   onAddTransaction: (transaction: Transaction) => void;
+  onEditTransaction?: (transaction: Transaction) => Promise<void>;
+  onDeleteTransaction?: (transaction: Transaction) => Promise<void>;
 }
 
 export const MetalTransactionView: React.FC<MetalTransactionViewProps> = ({
   metal,
   transactions,
   onAddTransaction,
+  onEditTransaction,
+  onDeleteTransaction,
 }) => {
   const metalTransactions = transactions.filter((t) => t.metal === metal);
 
@@ -35,18 +39,24 @@ export const MetalTransactionView: React.FC<MetalTransactionViewProps> = ({
           <TabsContent value="all">
             <TransactionList 
               transactions={metalTransactions} 
+              onEdit={onEditTransaction}
+              onDelete={onDeleteTransaction}
             />
           </TabsContent>
 
           <TabsContent value="buy">
             <TransactionList 
               transactions={metalTransactions.filter(t => t.type === "buy")} 
+              onEdit={onEditTransaction}
+              onDelete={onDeleteTransaction}
             />
           </TabsContent>
 
           <TabsContent value="sell">
             <TransactionList 
               transactions={metalTransactions.filter(t => t.type === "sell")} 
+              onEdit={onEditTransaction}
+              onDelete={onDeleteTransaction}
             />
           </TabsContent>
         </Tabs>

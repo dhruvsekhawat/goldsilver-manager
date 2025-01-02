@@ -25,7 +25,11 @@ export const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
 }) => {
   const { toast } = useToast();
   const [weight, setWeight] = React.useState(transaction.weight.toString());
-  const [price, setPrice] = React.useState(transaction.price.toString());
+  const [price, setPrice] = React.useState(
+    transaction.metal === "gold" 
+      ? (transaction.price * 10).toString() 
+      : transaction.price.toString()
+  );
   const [date, setDate] = React.useState<Date>(new Date(transaction.date));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,22 +52,24 @@ export const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
       const adjustedPrice = transaction.metal === "gold" ? priceValue / 10 : priceValue;
 
       const updatedTransaction: Transaction = {
-        ...transaction,
+        id: transaction.id,
+        type: transaction.type,
+        metal: transaction.metal,
         weight: weightValue,
         price: adjustedPrice,
         date: date.toISOString(),
+        remainingWeight: transaction.type === "buy" ? weightValue : 0,
+        soldFrom: transaction.soldFrom || [],
+        profit: transaction.profit || 0
       };
 
       await onSubmit(updatedTransaction);
-      
-      toast({
-        title: "Success",
-        description: "Transaction updated successfully",
-      });
+      onCancel(); // Close the dialog after successful submission
     } catch (error) {
+      console.error("Failed to update transaction:", error);
       toast({
         title: "Error",
-        description: "Failed to update transaction",
+        description: "Failed to update transaction. Please try again.",
         variant: "destructive",
       });
     }
