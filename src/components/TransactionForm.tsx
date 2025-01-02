@@ -64,18 +64,25 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
-    // Convert weight based on metal type
-    const weightInGrams = metal === "gold" 
-      ? parseFloat(weight) * 10 // Convert 10g units to grams
-      : parseFloat(weight) * 1000; // Convert kg to grams
+    const weightValue = parseFloat(weight);
+    const priceValue = parseFloat(price);
+
+    if (isNaN(weightValue) || isNaN(priceValue)) {
+      toast({
+        title: "Error",
+        description: "Invalid weight or price value",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const transaction: Transaction = {
       type,
       metal,
-      weight: weightInGrams,
-      price: metal === "gold" ? parseFloat(price) / 10 : parseFloat(price) / 1000,
+      weight: weightValue,
+      price: priceValue,
       date: date.toISOString(),
-      ...(type === "buy" ? { remainingWeight: weightInGrams } : {}),
+      ...(type === "buy" ? { remainingWeight: weightValue } : {}),
     };
 
     onSubmit(transaction);
@@ -149,7 +156,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             step="0.01"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
-            placeholder={metal === "gold" ? "Enter quantity (10g units)" : "Enter quantity (kg)"}
+            placeholder="Enter quantity"
           />
         </div>
 
@@ -158,10 +165,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <Input
             id="price"
             type="number"
-            step="0.01"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            placeholder={metal === "gold" ? "Price per 10g" : "Price per kg"}
+            placeholder="Enter rate"
           />
         </div>
       </div>

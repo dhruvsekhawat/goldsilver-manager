@@ -1,6 +1,8 @@
 import React from "react";
-import { TransactionForm, Transaction } from "@/components/TransactionForm";
-import { TransactionList } from "@/components/TransactionList";
+import { Transaction } from "./TransactionForm";
+import { TransactionList } from "./TransactionList";
+import { TransactionForm } from "./TransactionForm";
+import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface MetalTransactionViewProps {
@@ -14,34 +16,41 @@ export const MetalTransactionView: React.FC<MetalTransactionViewProps> = ({
   transactions,
   onAddTransaction,
 }) => {
-  const filteredTransactions = transactions.filter((t) => t.metal === metal);
+  const metalTransactions = transactions.filter((t) => t.metal === metal);
 
   return (
-    <div className="grid gap-8 md:grid-cols-[2fr,3fr]">
-      <div>
-        <h2 className="text-xl font-semibold mb-4">
-          Add {metal.charAt(0).toUpperCase() + metal.slice(1)} Transaction
-        </h2>
-        <TransactionForm onSubmit={onAddTransaction} defaultMetal={metal} />
-      </div>
-      <div>
-        <Tabs defaultValue="all">
-          <TabsList>
+    <div className="space-y-4">
+      <Card className="p-4">
+        <TransactionForm defaultMetal={metal} onSubmit={onAddTransaction} />
+      </Card>
+
+      <Card>
+        <Tabs defaultValue="all" className="w-full">
+          <TabsList className="w-full grid grid-cols-3">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="buy">Buy</TabsTrigger>
             <TabsTrigger value="sell">Sell</TabsTrigger>
           </TabsList>
+
           <TabsContent value="all">
-            <TransactionList transactions={filteredTransactions} filter="all" />
+            <TransactionList 
+              transactions={metalTransactions} 
+            />
           </TabsContent>
+
           <TabsContent value="buy">
-            <TransactionList transactions={filteredTransactions} filter="buy" />
+            <TransactionList 
+              transactions={metalTransactions.filter(t => t.type === "buy")} 
+            />
           </TabsContent>
+
           <TabsContent value="sell">
-            <TransactionList transactions={filteredTransactions} filter="sell" />
+            <TransactionList 
+              transactions={metalTransactions.filter(t => t.type === "sell")} 
+            />
           </TabsContent>
         </Tabs>
-      </div>
+      </Card>
     </div>
   );
 };

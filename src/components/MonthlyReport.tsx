@@ -35,11 +35,7 @@ const formatIndianCurrency = (amount: number): string => {
 
 // Helper function to format weight
 const formatWeight = (weight: number, metal: "gold" | "silver"): string => {
-  if (metal === "gold") {
-    return `${(weight / 10).toFixed(2)}`;
-  } else {
-    return `${(weight / 1000).toFixed(2)}`;
-  }
+  return weight.toFixed(2);
 };
 
 const calculateMonthlyStats = (monthTransactions: Transaction[]) => {
@@ -103,8 +99,8 @@ const TransactionTable: React.FC<{
             <TableCell className={transaction.type === "buy" ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
               {transaction.type.toUpperCase()}
             </TableCell>
-            <TableCell>{formatWeight(transaction.weight, transaction.metal)}</TableCell>
-            <TableCell>{formatIndianCurrency(transaction.price * (transaction.metal === "gold" ? 10 : 1000))}</TableCell>
+            <TableCell>{transaction.weight.toFixed(2)}</TableCell>
+            <TableCell>{formatIndianCurrency(transaction.price)}</TableCell>
             <TableCell>{formatIndianCurrency(transaction.weight * transaction.price)}</TableCell>
             <TableCell>
               {transaction.type === "sell" && transaction.profit ? 
@@ -128,10 +124,16 @@ const MonthlySummaryCard: React.FC<{
     totalProfit: number;
   };
   metal: "gold" | "silver";
-}> = ({ title, stats, metal }) => (
-  <Card>
+  currentStock: number;
+}> = ({ title, stats, metal, currentStock }) => (
+  <Card className={metal === "gold" ? "bg-[#fff7e6]" : "bg-[#f0f7ff]"}>
     <CardHeader className="pb-2">
-      <CardTitle className="text-lg">{title}</CardTitle>
+      <div className="flex justify-between items-center">
+        <CardTitle className="text-lg">{title}</CardTitle>
+        <div className="text-sm">
+          <span className="font-medium">Current Stock:</span> {currentStock.toFixed(2)}
+        </div>
+      </div>
     </CardHeader>
     <CardContent className="grid grid-cols-2 gap-2 text-sm">
       <div>
@@ -165,6 +167,16 @@ export const MonthlyReport: React.FC<MonthlyReportProps> = ({ transactions }) =>
       .sort((a, b) => b[0].localeCompare(a[0]));
   }, [transactions]);
 
+  // Calculate current stock
+  const currentStock = {
+    gold: transactions
+      .filter(t => t.metal === "gold")
+      .reduce((acc, t) => acc + (t.type === "buy" ? (t.remainingWeight || 0) : 0), 0),
+    silver: transactions
+      .filter(t => t.metal === "silver")
+      .reduce((acc, t) => acc + (t.type === "buy" ? (t.remainingWeight || 0) : 0), 0),
+  };
+
   return (
     <Accordion type="single" collapsible className="space-y-4">
       {monthlyTransactions.map(([month, monthTransactions]) => {
@@ -178,37 +190,37 @@ export const MonthlyReport: React.FC<MonthlyReportProps> = ({ transactions }) =>
               <div className="flex justify-between items-center w-full">
                 <span className="text-lg font-semibold">{monthDisplay}</span>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm px-3 py-1 rounded-full bg-green-100 text-green-800">
+                  <span className="text-sm px-3 py-1 rounded-md bg-[#fff7e6]">
                     Gold: {formatIndianCurrency(stats.gold.totalProfit)}
                   </span>
-                  <span className="text-sm px-3 py-1 rounded-full bg-blue-100 text-blue-800">
+                  <span className="text-sm px-3 py-1 rounded-md bg-[#f0f7ff]">
                     Silver: {formatIndianCurrency(stats.silver.totalProfit)}
                   </span>
-                  <span className="text-sm font-medium">
+                  <span className="text-sm">
                     Total: {formatIndianCurrency(totalProfit)}
                   </span>
                 </div>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
-              <div className="space-y-6">
-                {/* Monthly Summary Cards */}
+              <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <MonthlySummaryCard 
                     title="Gold Summary" 
                     stats={stats.gold}
                     metal="gold"
+                    currentStock={currentStock.gold}
                   />
                   <MonthlySummaryCard 
                     title="Silver Summary" 
                     stats={stats.silver}
                     metal="silver"
+                    currentStock={currentStock.silver}
                   />
                 </div>
 
-                {/* Transaction Tables */}
                 <Tabs defaultValue="gold" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="gold">Gold Transactions</TabsTrigger>
                     <TabsTrigger value="silver">Silver Transactions</TabsTrigger>
                   </TabsList>
