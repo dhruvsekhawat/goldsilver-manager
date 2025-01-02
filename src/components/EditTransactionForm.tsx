@@ -41,10 +41,16 @@ export const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
     }
 
     try {
+      const weightValue = parseFloat(weight);
+      const priceValue = parseFloat(price);
+
+      // For gold, convert the per-10g price to per-gram price
+      const adjustedPrice = transaction.metal === "gold" ? priceValue / 10 : priceValue;
+
       const updatedTransaction: Transaction = {
         ...transaction,
-        weight: parseFloat(weight),
-        price: parseFloat(price),
+        weight: weightValue,
+        price: adjustedPrice,
         date: date.toISOString(),
       };
 

@@ -100,7 +100,11 @@ const TransactionTable: React.FC<{
               {transaction.type.toUpperCase()}
             </TableCell>
             <TableCell>{transaction.weight.toFixed(2)}</TableCell>
-            <TableCell>{formatIndianCurrency(transaction.price)}</TableCell>
+            <TableCell>
+              {transaction.metal === "gold" 
+                ? formatIndianCurrency(transaction.price * 10)
+                : formatIndianCurrency(transaction.price)}
+            </TableCell>
             <TableCell>{formatIndianCurrency(transaction.weight * transaction.price)}</TableCell>
             <TableCell>
               {transaction.type === "sell" && transaction.profit ? 

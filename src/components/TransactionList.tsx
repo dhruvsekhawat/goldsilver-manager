@@ -279,7 +279,11 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   {transaction.metal.toUpperCase()}
                 </TableCell>
                 <TableCell>{transaction.weight.toFixed(2)}</TableCell>
-                <TableCell>{formatIndianCurrency(transaction.price)}</TableCell>
+                <TableCell>
+                  {transaction.metal === "gold" 
+                    ? formatIndianCurrency(transaction.price * 10)
+                    : formatIndianCurrency(transaction.price)}
+                </TableCell>
                 <TableCell>{formatIndianCurrency(transaction.weight * transaction.price)}</TableCell>
                 <TableCell>{transaction.remainingWeight?.toFixed(2) || "-"}</TableCell>
                 <TableCell>

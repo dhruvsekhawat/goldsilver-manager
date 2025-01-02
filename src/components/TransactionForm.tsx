@@ -76,11 +76,13 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
+    const adjustedPrice = metal === "gold" ? priceValue / 10 : priceValue;
+
     const transaction: Transaction = {
       type,
       metal,
       weight: weightValue,
-      price: priceValue,
+      price: adjustedPrice,
       date: date.toISOString(),
       ...(type === "buy" ? { remainingWeight: weightValue } : {}),
     };
