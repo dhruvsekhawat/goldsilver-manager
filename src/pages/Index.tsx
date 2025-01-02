@@ -202,6 +202,7 @@ const Index = () => {
       };
     }
 
+    // Get all buy transactions for this metal with remaining weight
     const availableBuyTransactions = [...transactions]
       .filter(
         (t) =>
@@ -210,6 +211,7 @@ const Index = () => {
           (t.remainingWeight || 0) > 0 &&
           t.id
       )
+      // Sort by price ascending (lowest price first)
       .sort((a, b) => a.price - b.price);
 
     if (availableBuyTransactions.length === 0) {
@@ -224,7 +226,9 @@ const Index = () => {
     let remainingToSell = newTransaction.weight;
     let totalCost = 0;
     const soldFrom: string[] = [];
+    const usedWeights: { [key: string]: number } = {}; // Track how much we use from each transaction
 
+    // First pass: Calculate which transactions we'll use and how much from each
     for (const buyTx of availableBuyTransactions) {
       if (remainingToSell <= 0) break;
       if (!buyTx.id) continue;
@@ -232,9 +236,12 @@ const Index = () => {
       const available = buyTx.remainingWeight || 0;
       const used = Math.min(available, remainingToSell);
 
-      totalCost += used * buyTx.price;
-      remainingToSell -= used;
-      soldFrom.push(buyTx.id);
+      if (used > 0) {
+        totalCost += used * buyTx.price;
+        remainingToSell -= used;
+        soldFrom.push(buyTx.id);
+        usedWeights[buyTx.id] = used;
+      }
     }
 
     if (remainingToSell > 0) {
@@ -248,6 +255,23 @@ const Index = () => {
 
     const revenue = newTransaction.weight * newTransaction.price;
     const profit = revenue - totalCost;
+
+    // Add debug information
+    console.log('FIFO Calculation:', {
+      soldAmount: newTransaction.weight,
+      soldPrice: newTransaction.price,
+      revenue,
+      usedTransactions: availableBuyTransactions
+        .filter(t => t.id && usedWeights[t.id])
+        .map(t => ({
+          id: t.id,
+          buyPrice: t.price,
+          amountUsed: t.id ? usedWeights[t.id] : 0,
+          cost: t.id ? (usedWeights[t.id] * t.price) : 0
+        })),
+      totalCost,
+      profit
+    });
 
     return {
       ...newTransaction,
