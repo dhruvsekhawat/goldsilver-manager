@@ -492,15 +492,16 @@ const Index = () => {
           <TabsContent value="all">
             <TransactionList 
               transactions={transactions} 
+              allTransactions={transactions}
               onEdit={handleEditTransaction}
               onDelete={handleDeleteTransaction}
             />
           </TabsContent>
 
           <TabsContent value="gold">
-            <MetalTransactionView 
-              transactions={transactions.filter(t => t.metal === "gold")} 
-              metal="gold" 
+            <MetalTransactionView
+              metal="gold"
+              transactions={transactions}
               onAddTransaction={handleAddTransaction}
               onEditTransaction={handleEditTransaction}
               onDeleteTransaction={handleDeleteTransaction}
@@ -508,9 +509,9 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="silver">
-            <MetalTransactionView 
-              transactions={transactions.filter(t => t.metal === "silver")} 
-              metal="silver" 
+            <MetalTransactionView
+              metal="silver"
+              transactions={transactions}
               onAddTransaction={handleAddTransaction}
               onEditTransaction={handleEditTransaction}
               onDeleteTransaction={handleDeleteTransaction}

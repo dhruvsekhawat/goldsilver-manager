@@ -1,12 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import { Transaction } from "./TransactionForm";
-import {
-  startOfWeek,
-  endOfWeek,
-  parseISO,
-  format,
-  isWithinInterval,
-} from "date-fns";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Table,
   TableBody,
@@ -15,9 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DatePicker } from "@/components/ui/date-picker";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface WeeklyReportProps {
   transactions: Transaction[];
@@ -33,224 +34,289 @@ const formatIndianCurrency = (amount: number): string => {
   return formatter.format(amount);
 };
 
-const WeeklySummaryCard: React.FC<{
-  title: string;
-  stats: {
-    buyQty: number;
-    sellQty: number;
-    buyValue: number;
-    sellValue: number;
-    profit: number;
-  };
+interface MetalSummary {
+  totalBuyWeight: number;
+  totalBuyValue: number;
+  totalSellWeight: number;
+  totalSellValue: number;
+  averageBuyRate: number;
+  averageSellRate: number;
+  profit: number;
+  remainingStock: number;
+  stockValue: number;
+}
+
+const WeeklyMetalReport: React.FC<{
+  transactions: Transaction[];
   metal: "gold" | "silver";
-  currentStock: number;
-}> = ({ title, stats, metal, currentStock }) => (
-  <Card className={metal === "gold" ? "bg-[#fff7e6]" : "bg-[#f0f7ff]"}>
-    <CardHeader className="pb-2">
-      <div className="flex justify-between items-center">
-        <CardTitle className="text-lg">{title}</CardTitle>
-        <div className={`text-sm ${metal === "gold" ? "text-green-800" : "text-blue-800"}`}>
-          <span className="font-medium">Current Stock:</span> {currentStock.toFixed(2)}
-        </div>
-      </div>
-    </CardHeader>
-    <CardContent className="grid grid-cols-2 gap-2 text-sm">
-      <div>
-        <p className="font-medium">Buy:</p>
-        <p>Qty: {stats.buyQty.toFixed(2)}</p>
-        <p>Value: {formatIndianCurrency(stats.buyValue)}</p>
-      </div>
-      <div>
-        <p className="font-medium">Sell:</p>
-        <p>Qty: {stats.sellQty.toFixed(2)}</p>
-        <p>Value: {formatIndianCurrency(stats.sellValue)}</p>
-      </div>
-      <div className="col-span-2 mt-2 pt-2 border-t">
-        <p className="font-medium">Profit: {formatIndianCurrency(stats.profit)}</p>
-      </div>
-    </CardContent>
-  </Card>
-);
+  startDate: Date;
+  endDate: Date;
+}> = ({ transactions, metal, startDate, endDate }) => {
+  // Filter transactions for the selected week and metal
+  const weeklyTransactions = transactions.filter(t => 
+    t.metal === metal &&
+    isWithinInterval(parseISO(t.date), { start: startDate, end: endDate })
+  );
 
-export const WeeklyReport: React.FC<WeeklyReportProps> = ({ transactions }) => {
-  const [startDate, setStartDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [endDate, setEndDate] = useState<Date>(endOfWeek(new Date(), { weekStartsOn: 1 }));
+  // Calculate summaries
+  const buyTransactions = weeklyTransactions.filter(t => t.type === "buy");
+  const sellTransactions = weeklyTransactions.filter(t => t.type === "sell");
 
-  // Filter transactions for selected date range
-  const weeklyTransactions = transactions.filter(t => {
-    const transactionDate = parseISO(t.date);
-    return isWithinInterval(transactionDate, { start: startDate, end: endDate });
-  });
-
-  // Calculate current stock (all transactions)
-  const currentStock = {
-    gold: transactions
-      .filter(t => t.metal === "gold")
+  const summary: MetalSummary = {
+    totalBuyWeight: buyTransactions.reduce((acc, t) => acc + t.weight, 0),
+    totalBuyValue: buyTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
+    totalSellWeight: sellTransactions.reduce((acc, t) => acc + t.weight, 0),
+    totalSellValue: sellTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
+    averageBuyRate: buyTransactions.length > 0 
+      ? buyTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0) / 
+        buyTransactions.reduce((acc, t) => acc + t.weight, 0)
+      : 0,
+    averageSellRate: sellTransactions.length > 0
+      ? sellTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0) /
+        sellTransactions.reduce((acc, t) => acc + t.weight, 0)
+      : 0,
+    profit: sellTransactions.reduce((acc, t) => acc + (t.profit || 0), 0),
+    remainingStock: transactions
+      .filter(t => t.metal === metal)
       .reduce((acc, t) => acc + (t.type === "buy" ? (t.remainingWeight || 0) : 0), 0),
-    silver: transactions
-      .filter(t => t.metal === "silver")
-      .reduce((acc, t) => acc + (t.type === "buy" ? (t.remainingWeight || 0) : 0), 0),
+    stockValue: 0, // Will be calculated below
   };
 
-  // Separate gold and silver transactions
-  const goldTransactions = weeklyTransactions.filter(t => t.metal === "gold");
-  const silverTransactions = weeklyTransactions.filter(t => t.metal === "silver");
-
-  // Calculate summaries for gold
-  const goldSummary = {
-    buyQty: goldTransactions.filter(t => t.type === "buy").reduce((acc, t) => acc + t.weight, 0),
-    sellQty: goldTransactions.filter(t => t.type === "sell").reduce((acc, t) => acc + t.weight, 0),
-    buyValue: goldTransactions.filter(t => t.type === "buy").reduce((acc, t) => acc + (t.weight * t.price), 0),
-    sellValue: goldTransactions.filter(t => t.type === "sell").reduce((acc, t) => acc + (t.weight * t.price), 0),
-    profit: goldTransactions.filter(t => t.type === "sell").reduce((acc, t) => acc + (t.profit || 0), 0),
-  };
-
-  // Calculate summaries for silver
-  const silverSummary = {
-    buyQty: silverTransactions.filter(t => t.type === "buy").reduce((acc, t) => acc + t.weight, 0),
-    sellQty: silverTransactions.filter(t => t.type === "sell").reduce((acc, t) => acc + t.weight, 0),
-    buyValue: silverTransactions.filter(t => t.type === "buy").reduce((acc, t) => acc + (t.weight * t.price), 0),
-    sellValue: silverTransactions.filter(t => t.type === "sell").reduce((acc, t) => acc + (t.weight * t.price), 0),
-    profit: silverTransactions.filter(t => t.type === "sell").reduce((acc, t) => acc + (t.profit || 0), 0),
-  };
-
-  const totalProfit = goldSummary.profit + silverSummary.profit;
+  // Calculate current stock value based on average buy rate of remaining stock
+  const remainingBuyTransactions = transactions
+    .filter(t => t.metal === metal && t.type === "buy" && (t.remainingWeight || 0) > 0);
+  
+  if (remainingBuyTransactions.length > 0) {
+    summary.stockValue = remainingBuyTransactions.reduce((acc, t) => 
+      acc + ((t.remainingWeight || 0) * t.price), 0);
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold">Custom Date Range</h2>
-          <div className="flex items-center gap-2">
-            <DatePicker
-              date={startDate}
-              setDate={setStartDate}
-              placeholder="Start Date"
-            />
-            <span>to</span>
-            <DatePicker
-              date={endDate}
-              setDate={setEndDate}
-              placeholder="End Date"
-            />
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Stock Summary Card */}
+        <Card className="p-4 space-y-2">
+          <h3 className="font-semibold text-sm text-muted-foreground">Current Stock</h3>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span>Quantity:</span>
+              <span className="font-mono font-medium">{summary.remainingStock.toFixed(2)}g</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Value:</span>
+              <span className="font-mono font-medium">
+                {formatIndianCurrency(summary.stockValue)}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm px-3 py-1 rounded-md bg-[#fff7e6]">
-            Gold: {formatIndianCurrency(goldSummary.profit)}
-          </span>
-          <span className="text-sm px-3 py-1 rounded-md bg-[#f0f7ff]">
-            Silver: {formatIndianCurrency(silverSummary.profit)}
-          </span>
-          <span className="text-sm">
-            Total: {formatIndianCurrency(totalProfit)}
-          </span>
-        </div>
+        </Card>
+
+        {/* Weekly Activity Card */}
+        <Card className="p-4 space-y-2">
+          <h3 className="font-semibold text-sm text-muted-foreground">Weekly Activity</h3>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center">
+              <span>Bought:</span>
+              <span className="font-mono font-medium">{summary.totalBuyWeight.toFixed(2)}g</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>Sold:</span>
+              <span className="font-mono font-medium">{summary.totalSellWeight.toFixed(2)}g</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Profit Summary Card */}
+        <Card className="p-4 space-y-2">
+          <h3 className="font-semibold text-sm text-muted-foreground">Weekly Profit/Loss</h3>
+          <div className="flex justify-between items-center">
+            <span>Total:</span>
+            <span className={`font-mono font-medium flex items-center gap-1 
+              ${summary.profit > 0 ? 'text-green-600' : summary.profit < 0 ? 'text-red-600' : ''}`}>
+              {summary.profit > 0 ? <TrendingUp className="h-4 w-4" /> : 
+               summary.profit < 0 ? <TrendingDown className="h-4 w-4" /> : null}
+              {formatIndianCurrency(Math.abs(summary.profit))}
+            </span>
+          </div>
+        </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <WeeklySummaryCard 
-          title="Gold Summary" 
-          stats={goldSummary}
-          metal="gold"
-          currentStock={currentStock.gold}
-        />
-        <WeeklySummaryCard 
-          title="Silver Summary" 
-          stats={silverSummary}
-          metal="silver"
-          currentStock={currentStock.silver}
-        />
-      </div>
-
-      <Card>
-        <Tabs defaultValue="gold" className="w-full">
-          <TabsList className="w-full grid grid-cols-2">
-            <TabsTrigger value="gold">Gold Transactions</TabsTrigger>
-            <TabsTrigger value="silver">Silver Transactions</TabsTrigger>
+      {/* Detailed Transactions */}
+      <div className="space-y-4">
+        <h3 className="font-semibold">Transaction Details</h3>
+        <Tabs defaultValue="all">
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="buy">Buy</TabsTrigger>
+            <TabsTrigger value="sell">Sell</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="gold">
-            <div className="p-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Rate</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Profit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {goldTransactions.map((transaction) => (
-                    <TableRow 
-                      key={transaction.id}
-                      className={transaction.type === "buy" ? "bg-green-50" : "bg-red-50"}
-                    >
-                      <TableCell>{format(parseISO(transaction.date), "dd/MM/yyyy")}</TableCell>
-                      <TableCell className={transaction.type === "buy" ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                        {transaction.type.toUpperCase()}
-                      </TableCell>
-                      <TableCell>{transaction.weight.toFixed(2)}</TableCell>
-                      <TableCell>
-                        {transaction.metal === "gold" 
-                          ? formatIndianCurrency(transaction.price * 10)
-                          : formatIndianCurrency(transaction.price)}
-                      </TableCell>
-                      <TableCell>{formatIndianCurrency(transaction.weight * transaction.price)}</TableCell>
-                      <TableCell>
-                        {transaction.type === "sell" && transaction.profit ? 
-                          formatIndianCurrency(transaction.profit) : 
-                          "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+          <TabsContent value="all">
+            <TransactionTable 
+              transactions={weeklyTransactions}
+              metal={metal}
+            />
           </TabsContent>
 
-          <TabsContent value="silver">
-            <div className="p-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Rate</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Profit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {silverTransactions.map((transaction) => (
-                    <TableRow 
-                      key={transaction.id}
-                      className={transaction.type === "buy" ? "bg-green-50" : "bg-red-50"}
-                    >
-                      <TableCell>{format(parseISO(transaction.date), "dd/MM/yyyy")}</TableCell>
-                      <TableCell className={transaction.type === "buy" ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                        {transaction.type.toUpperCase()}
-                      </TableCell>
-                      <TableCell>{transaction.weight.toFixed(2)}</TableCell>
-                      <TableCell>{formatIndianCurrency(transaction.price)}</TableCell>
-                      <TableCell>{formatIndianCurrency(transaction.weight * transaction.price)}</TableCell>
-                      <TableCell>
-                        {transaction.type === "sell" && transaction.profit ? 
-                          formatIndianCurrency(transaction.profit) : 
-                          "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+          <TabsContent value="buy">
+            <TransactionTable 
+              transactions={buyTransactions}
+              metal={metal}
+            />
+          </TabsContent>
+
+          <TabsContent value="sell">
+            <TransactionTable 
+              transactions={sellTransactions}
+              metal={metal}
+            />
           </TabsContent>
         </Tabs>
+      </div>
+
+      {/* Rate Analysis */}
+      <Card className="p-4">
+        <h3 className="font-semibold mb-4">Rate Analysis</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <h4 className="text-sm text-muted-foreground">Buy Rates</h4>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <span>Average Rate:</span>
+                <span className="font-mono">
+                  {metal === "gold" 
+                    ? formatIndianCurrency(summary.averageBuyRate * 10)
+                    : formatIndianCurrency(summary.averageBuyRate)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Total Value:</span>
+                <span className="font-mono">{formatIndianCurrency(summary.totalBuyValue)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-sm text-muted-foreground">Sell Rates</h4>
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <span>Average Rate:</span>
+                <span className="font-mono">
+                  {metal === "gold" 
+                    ? formatIndianCurrency(summary.averageSellRate * 10)
+                    : formatIndianCurrency(summary.averageSellRate)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Total Value:</span>
+                <span className="font-mono">{formatIndianCurrency(summary.totalSellValue)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </Card>
+    </div>
+  );
+};
+
+const TransactionTable: React.FC<{
+  transactions: Transaction[];
+  metal: "gold" | "silver";
+}> = ({ transactions, metal }) => {
+  if (transactions.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No transactions found for this period
+      </div>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Date</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead className="text-right">Quantity</TableHead>
+          <TableHead className="text-right">Rate</TableHead>
+          <TableHead className="text-right">Total</TableHead>
+          <TableHead className="text-right">Profit/Loss</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {transactions.map((transaction) => (
+          <TableRow key={transaction.id}>
+            <TableCell>{format(parseISO(transaction.date), "dd/MM/yyyy")}</TableCell>
+            <TableCell className="capitalize">{transaction.type}</TableCell>
+            <TableCell className="text-right font-mono">
+              {transaction.weight.toFixed(2)}g
+            </TableCell>
+            <TableCell className="text-right font-mono">
+              {metal === "gold" 
+                ? formatIndianCurrency(transaction.price * 10)
+                : formatIndianCurrency(transaction.price)}
+            </TableCell>
+            <TableCell className="text-right font-mono">
+              {formatIndianCurrency(transaction.weight * transaction.price)}
+            </TableCell>
+            <TableCell className="text-right">
+              {transaction.type === "sell" && transaction.profit ? (
+                <span className={`font-mono ${transaction.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatIndianCurrency(transaction.profit)}
+                </span>
+              ) : "-"}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+};
+
+export const WeeklyReport: React.FC<WeeklyReportProps> = ({ transactions }) => {
+  const [startDate, setStartDate] = React.useState<Date>(startOfWeek(new Date()));
+  const [endDate, setEndDate] = React.useState<Date>(endOfWeek(new Date()));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Weekly Report</h2>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">From:</span>
+            <DatePicker date={startDate} onDateChange={setStartDate} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">To:</span>
+            <DatePicker date={endDate} onDateChange={setEndDate} />
+          </div>
+        </div>
+      </div>
+
+      <Tabs defaultValue="gold">
+        <TabsList>
+          <TabsTrigger value="gold">Gold</TabsTrigger>
+          <TabsTrigger value="silver">Silver</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="gold">
+          <WeeklyMetalReport
+            transactions={transactions}
+            metal="gold"
+            startDate={startDate}
+            endDate={endDate}
+          />
+        </TabsContent>
+
+        <TabsContent value="silver">
+          <WeeklyMetalReport
+            transactions={transactions}
+            metal="silver"
+            startDate={startDate}
+            endDate={endDate}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }; 
