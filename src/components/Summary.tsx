@@ -23,11 +23,18 @@ const formatIndianCurrency = (amount: number): string => {
   return formatter.format(amount);
 };
 
-const StockValueBadge: React.FC<{ value: number }> = ({ value }) => {
-  if (value <= 0) return null;
+const formatWeight = (weight: number, metal: "gold" | "silver"): string => {
+  if (metal === "gold") {
+    return `${weight.toFixed(2)}g`;
+  } else {
+    return `${weight.toFixed(2)}kg`;
+  }
+};
+
+const StockValueBadge: React.FC<{ value: number; metal: "gold" | "silver" }> = ({ value, metal }) => {
   return (
-    <Badge variant="outline" className="ml-2 font-mono">
-      {value.toFixed(2)}g
+    <Badge variant="outline" className={`ml-2 ${value < 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+      {formatWeight(value, metal)}
     </Badge>
   );
 };
@@ -45,6 +52,16 @@ const ProfitBadge: React.FC<{ value: number }> = ({ value }) => {
   );
 };
 
+const calculateTotal = (transaction: Transaction): number => {
+  if (transaction.metal === "gold") {
+    // For gold: price is per 10g, so adjust for actual weight
+    return (transaction.weight / 10) * transaction.price;
+  } else {
+    // For silver: price is per kg, weight is in kg
+    return transaction.weight * transaction.price;
+  }
+};
+
 export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
   const [isGoldOpen, setIsGoldOpen] = React.useState(true);
   const [isSilverOpen, setIsSilverOpen] = React.useState(true);
@@ -57,13 +74,28 @@ export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
   
   // Calculate gold rate based on remaining stock
   const goldRemainingBuyTransactions = goldBuyTransactions.filter(t => (t.remainingWeight || 0) > 0);
+
+  // Calculate net position by tracking uncovered sells
+  const goldNetPosition = (() => {
+    // First get total sell amount
+    const totalSellAmount = goldSellTransactions.reduce((acc, t) => acc + t.weight, 0);
+    
+    // Then get total buy amount that's been used to cover sells
+    const totalBuyUsed = goldBuyTransactions.reduce((acc, t) => acc + (t.weight - (t.remainingWeight || 0)), 0);
+    
+    // Then get remaining buy amount
+    const remainingBuyAmount = goldBuyTransactions.reduce((acc, t) => acc + (t.remainingWeight || 0), 0);
+    
+    // Net position is: remaining buys - (total sells - covered sells)
+    return remainingBuyAmount - (totalSellAmount - totalBuyUsed);
+  })();
+  
   const goldSummary = {
-    currentStock: goldTransactions.reduce((acc, t) => acc + (t.type === "buy" ? (t.remainingWeight || 0) : 0), 0),
-    totalBuyValue: goldBuyTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
-    totalSellValue: goldSellTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
+    currentStock: goldNetPosition,
+    totalBuyValue: goldBuyTransactions.reduce((acc, t) => acc + calculateTotal(t), 0),
+    totalSellValue: goldSellTransactions.reduce((acc, t) => acc + calculateTotal(t), 0),
     averageRate: goldRemainingBuyTransactions.length > 0   
-      ? goldRemainingBuyTransactions.reduce((acc, t) => acc + ((t.remainingWeight || 0) * t.price), 0) / 
-        goldRemainingBuyTransactions.reduce((acc, t) => acc + (t.remainingWeight || 0), 0)
+      ? goldRemainingBuyTransactions.reduce((acc, t) => acc + t.price, 0) / goldRemainingBuyTransactions.length
       : 0,
     totalProfit: goldSellTransactions.reduce((acc, t) => acc + (t.profit || 0), 0),
   };
@@ -75,20 +107,39 @@ export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
   
   // Calculate silver rate based on remaining stock
   const silverRemainingBuyTransactions = silverBuyTransactions.filter(t => (t.remainingWeight || 0) > 0);
+
+  // Calculate net position by tracking uncovered sells
+  const silverNetPosition = (() => {
+    // First get total sell amount
+    const totalSellAmount = silverSellTransactions.reduce((acc, t) => acc + t.weight, 0);
+    
+    // Then get total buy amount that's been used to cover sells
+    const totalBuyUsed = silverBuyTransactions.reduce((acc, t) => acc + (t.weight - (t.remainingWeight || 0)), 0);
+    
+    // Then get remaining buy amount
+    const remainingBuyAmount = silverBuyTransactions.reduce((acc, t) => acc + (t.remainingWeight || 0), 0);
+    
+    // Net position is: remaining buys - (total sells - covered sells)
+    return remainingBuyAmount - (totalSellAmount - totalBuyUsed);
+  })();
+  
   const silverSummary = {
-    currentStock: silverTransactions.reduce((acc, t) => acc + (t.type === "buy" ? (t.remainingWeight || 0) : 0), 0),
-    totalBuyValue: silverBuyTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
-    totalSellValue: silverSellTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
+    currentStock: silverNetPosition,
+    totalBuyValue: silverBuyTransactions.reduce((acc, t) => acc + calculateTotal(t), 0),
+    totalSellValue: silverSellTransactions.reduce((acc, t) => acc + calculateTotal(t), 0),
     averageRate: silverRemainingBuyTransactions.length > 0 
-      ? silverRemainingBuyTransactions.reduce((acc, t) => acc + ((t.remainingWeight || 0) * t.price), 0) / 
-        silverRemainingBuyTransactions.reduce((acc, t) => acc + (t.remainingWeight || 0), 0)
+      ? silverRemainingBuyTransactions.reduce((acc, t) => acc + t.price, 0) / silverRemainingBuyTransactions.length
       : 0,
     totalProfit: silverSellTransactions.reduce((acc, t) => acc + (t.profit || 0), 0),
   };
 
-  // Calculate current stock value
-  const goldStockValue = goldSummary.currentStock * goldSummary.averageRate;
-  const silverStockValue = silverSummary.currentStock * silverSummary.averageRate;
+  // Calculate current stock value only for positive stock
+  const goldStockValue = goldSummary.currentStock > 0 
+    ? goldSummary.currentStock * goldSummary.averageRate / 10 
+    : 0;
+  const silverStockValue = silverSummary.currentStock > 0 
+    ? silverSummary.currentStock * silverSummary.averageRate 
+    : 0;
   const totalStockValue = goldStockValue + silverStockValue;
 
   return (
@@ -100,7 +151,7 @@ export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-lg flex items-center">
                 Gold Summary
-                <StockValueBadge value={goldSummary.currentStock} />
+                <StockValueBadge value={goldSummary.currentStock} metal="gold" />
               </CardTitle>
               <ChevronDown className={`h-4 w-4 transition-transform ${isGoldOpen ? 'transform rotate-180' : ''}`} />
             </CardHeader>
@@ -142,7 +193,7 @@ export const Summary: React.FC<SummaryProps> = ({ transactions }) => {
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-lg flex items-center">
                 Silver Summary
-                <StockValueBadge value={silverSummary.currentStock} />
+                <StockValueBadge value={silverSummary.currentStock} metal="silver" />
               </CardTitle>
               <ChevronDown className={`h-4 w-4 transition-transform ${isSilverOpen ? 'transform rotate-180' : ''}`} />
             </CardHeader>

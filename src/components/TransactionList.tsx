@@ -127,6 +127,14 @@ const ProfitIndicator: React.FC<{ value: number }> = ({ value }) => {
   );
 };
 
+const formatWeight = (weight: number, metal: "gold" | "silver"): string => {
+  if (metal === "gold") {
+    return `${weight.toFixed(2)}g`;
+  } else {
+    return `${weight.toFixed(2)}kg`;
+  }
+};
+
 const SellDetailsCard: React.FC<{ 
   transaction: Transaction;
   allTransactions: Transaction[];
@@ -172,16 +180,13 @@ const SellDetailsCard: React.FC<{
               <div className="flex justify-between items-center">
                 <div className="text-muted-foreground">Rate:</div>
                 <div className="font-mono">
-                  {transaction.metal === "gold" 
-                    ? formatIndianCurrency(buyTx.price * 10)
-                    : formatIndianCurrency(buyTx.price)
-                  }
+                  {formatIndianCurrency(buyTx.price)}
                 </div>
               </div>
               <div className="flex justify-between items-center">
                 <div className="text-muted-foreground">Quantity:</div>
                 <div className="font-mono">
-                  {buyTx.weightUsed.toFixed(2)}g
+                  {formatWeight(buyTx.weightUsed, transaction.metal)}
                 </div>
               </div>
             </div>
@@ -192,6 +197,16 @@ const SellDetailsCard: React.FC<{
       </div>
     </div>
   );
+};
+
+const calculateTotal = (transaction: Transaction): number => {
+  if (transaction.metal === "gold") {
+    // For gold: price is per 10g, so adjust for actual weight
+    return (transaction.weight / 10) * transaction.price;
+  } else {
+    // For silver: price is per kg, weight is in kg
+    return transaction.weight * transaction.price;
+  }
 };
 
 export const TransactionList: React.FC<TransactionListProps> = ({ 
@@ -488,19 +503,19 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 </TableCell>
                 <TableCell className="capitalize">{transaction.metal}</TableCell>
                 <TableCell className="text-right font-mono">
-                  {transaction.weight.toFixed(2)}g
+                  {formatWeight(transaction.weight, transaction.metal)}
                 </TableCell>
                 <TableCell className="text-right font-mono">
                   {transaction.metal === "gold" 
-                    ? formatIndianCurrency(transaction.price * 10)
+                    ? formatIndianCurrency(transaction.price)
                     : formatIndianCurrency(transaction.price)
                   }
                 </TableCell>
                 <TableCell className="text-right font-mono">
-                  {formatIndianCurrency(transaction.weight * transaction.price)}
+                  {formatIndianCurrency(calculateTotal(transaction))}
                 </TableCell>
                 <TableCell className="text-right font-mono">
-                  {transaction.type === "buy" ? `${(transaction.remainingWeight || 0).toFixed(2)}g` : "-"}
+                  {transaction.type === "buy" ? formatWeight(transaction.remainingWeight || 0, transaction.metal) : "-"}
                 </TableCell>
                 <TableCell className="text-right">
                   {transaction.type === "sell" ? (

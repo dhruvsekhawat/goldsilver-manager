@@ -61,14 +61,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     const weightValue = parseFloat(weight);
     const priceValue = parseFloat(price);
 
-    // For gold, convert the per-10g price to per-gram price
-    const adjustedPrice = metal === "gold" ? priceValue / 10 : priceValue;
-
+    // Store values exactly as entered:
+    // For gold: weight in grams, price per 10g
+    // For silver: weight in kg, price per kg
     const transaction: Transaction = {
       type,
       metal,
       weight: weightValue,
-      price: adjustedPrice,
+      price: priceValue, // Store price exactly as entered (per 10g for gold, per kg for silver)
       date: date.toISOString(),
     };
 
@@ -126,7 +126,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             step="0.01"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
-            placeholder="Enter quantity"
+            placeholder={`Enter quantity (${metal === "gold" ? "g" : "kg"})`}
             className="h-9"
           />
         </div>
@@ -138,7 +138,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             step="0.01"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            placeholder={`Rate per ${metal === "gold" ? "10g" : "1g"}`}
+            placeholder={`Rate per ${metal === "gold" ? "10g" : "kg"}`}
             className="h-9"
           />
         </div>

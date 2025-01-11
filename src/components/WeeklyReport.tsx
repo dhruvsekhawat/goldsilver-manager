@@ -1,6 +1,6 @@
 import React from "react";
 import { Transaction } from "./TransactionForm";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, parseISO, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -46,6 +46,24 @@ interface MetalSummary {
   stockValue: number;
 }
 
+const formatWeight = (weight: number, metal: "gold" | "silver"): string => {
+  if (metal === "gold") {
+    return `${weight.toFixed(2)}g`;
+  } else {
+    return `${weight.toFixed(2)}kg`;
+  }
+};
+
+const calculateTotal = (t: Transaction, metal: "gold" | "silver"): number => {
+  if (metal === "gold") {
+    // For gold: price is per 10g, multiply by 10 to get per gram rate
+    return t.weight * (t.price / 10);
+  } else {
+    // For silver: price is per kg, weight is in kg
+    return t.weight * t.price;
+  }
+};
+
 const WeeklyMetalReport: React.FC<{
   transactions: Transaction[];
   metal: "gold" | "silver";
@@ -64,16 +82,14 @@ const WeeklyMetalReport: React.FC<{
 
   const summary: MetalSummary = {
     totalBuyWeight: buyTransactions.reduce((acc, t) => acc + t.weight, 0),
-    totalBuyValue: buyTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
+    totalBuyValue: buyTransactions.reduce((acc, t) => acc + calculateTotal(t, metal), 0),
     totalSellWeight: sellTransactions.reduce((acc, t) => acc + t.weight, 0),
-    totalSellValue: sellTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0),
+    totalSellValue: sellTransactions.reduce((acc, t) => acc + calculateTotal(t, metal), 0),
     averageBuyRate: buyTransactions.length > 0 
-      ? buyTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0) / 
-        buyTransactions.reduce((acc, t) => acc + t.weight, 0)
+      ? buyTransactions.reduce((acc, t) => acc + (t.price), 0) / buyTransactions.length
       : 0,
     averageSellRate: sellTransactions.length > 0
-      ? sellTransactions.reduce((acc, t) => acc + (t.weight * t.price), 0) /
-        sellTransactions.reduce((acc, t) => acc + t.weight, 0)
+      ? sellTransactions.reduce((acc, t) => acc + (t.price), 0) / sellTransactions.length
       : 0,
     profit: sellTransactions.reduce((acc, t) => acc + (t.profit || 0), 0),
     remainingStock: transactions
@@ -82,139 +98,128 @@ const WeeklyMetalReport: React.FC<{
     stockValue: 0, // Will be calculated below
   };
 
-  // Calculate current stock value based on average buy rate of remaining stock
-  const remainingBuyTransactions = transactions
-    .filter(t => t.metal === metal && t.type === "buy" && (t.remainingWeight || 0) > 0);
-  
-  if (remainingBuyTransactions.length > 0) {
-    summary.stockValue = remainingBuyTransactions.reduce((acc, t) => 
-      acc + ((t.remainingWeight || 0) * t.price), 0);
-  }
+  // Calculate current stock
+  const currentStock = (() => {
+    const metalTransactions = transactions.filter(t => t.metal === metal);
+    const buyTransactions = metalTransactions.filter(t => t.type === "buy");
+    const sellTransactions = metalTransactions.filter(t => t.type === "sell");
+
+    // First get total sell amount
+    const totalSellAmount = sellTransactions.reduce((acc, t) => acc + t.weight, 0);
+    
+    // Then get total buy amount that's been used to cover sells
+    const totalBuyUsed = buyTransactions.reduce((acc, t) => acc + (t.weight - (t.remainingWeight || 0)), 0);
+    
+    // Then get remaining buy amount
+    const remainingBuyAmount = buyTransactions.reduce((acc, t) => acc + (t.remainingWeight || 0), 0);
+    
+    // Net position is: remaining buys - (total sells - covered sells)
+    return remainingBuyAmount - (totalSellAmount - totalBuyUsed);
+  })();
+
+  // Calculate current stock value
+  const currentStockValue = currentStock > 0 
+    ? currentStock * summary.averageBuyRate / (metal === "gold" ? 10 : 1)
+    : 0;
+
+  // Calculate weekly activity
+  const weeklyBuyTransactions = transactions.filter(t => t.type === "buy");
+  const weeklySellTransactions = transactions.filter(t => t.type === "sell");
+
+  const weeklyBought = weeklyBuyTransactions.reduce((acc, t) => acc + t.weight, 0);
+  const weeklySold = weeklySellTransactions.reduce((acc, t) => acc + t.weight, 0);
+
+  // Calculate weekly profit/loss
+  const weeklyProfit = weeklySellTransactions.reduce((acc, t) => acc + (t.profit || 0), 0);
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Stock Summary Card */}
-        <Card className="p-4 space-y-2">
-          <h3 className="font-semibold text-sm text-muted-foreground">Current Stock</h3>
-          <div className="space-y-1">
+    <div className="space-y-8">
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Current Stock */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Current Stock</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
             <div className="flex justify-between items-center">
-              <span>Quantity:</span>
-              <span className="font-mono font-medium">{summary.remainingStock.toFixed(2)}g</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Value:</span>
-              <span className="font-mono font-medium">
-                {formatIndianCurrency(summary.stockValue)}
+              <span className="text-sm text-muted-foreground">Quantity:</span>
+              <span className="font-mono">
+                {formatWeight(currentStock, metal)}
               </span>
             </div>
-          </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Value:</span>
+              <span className="font-mono">
+                {formatIndianCurrency(currentStockValue)}
+              </span>
+            </div>
+          </CardContent>
         </Card>
 
-        {/* Weekly Activity Card */}
-        <Card className="p-4 space-y-2">
-          <h3 className="font-semibold text-sm text-muted-foreground">Weekly Activity</h3>
-          <div className="space-y-1">
+        {/* Weekly Activity */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Weekly Activity</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
             <div className="flex justify-between items-center">
-              <span>Bought:</span>
-              <span className="font-mono font-medium">{summary.totalBuyWeight.toFixed(2)}g</span>
+              <span className="text-sm text-muted-foreground">Bought:</span>
+              <span className="font-mono">
+                {formatWeight(weeklyBought, metal)}
+              </span>
             </div>
             <div className="flex justify-between items-center">
-              <span>Sold:</span>
-              <span className="font-mono font-medium">{summary.totalSellWeight.toFixed(2)}g</span>
+              <span className="text-sm text-muted-foreground">Sold:</span>
+              <span className="font-mono">
+                {formatWeight(weeklySold, metal)}
+              </span>
             </div>
-          </div>
+          </CardContent>
         </Card>
 
-        {/* Profit Summary Card */}
-        <Card className="p-4 space-y-2">
-          <h3 className="font-semibold text-sm text-muted-foreground">Weekly Profit/Loss</h3>
-          <div className="flex justify-between items-center">
-            <span>Total:</span>
-            <span className={`font-mono font-medium flex items-center gap-1 
-              ${summary.profit > 0 ? 'text-green-600' : summary.profit < 0 ? 'text-red-600' : ''}`}>
-              {summary.profit > 0 ? <TrendingUp className="h-4 w-4" /> : 
-               summary.profit < 0 ? <TrendingDown className="h-4 w-4" /> : null}
-              {formatIndianCurrency(Math.abs(summary.profit))}
-            </span>
-          </div>
+        {/* Weekly Profit/Loss */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Weekly Profit/Loss</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Total:</span>
+              <div className="flex items-center gap-2">
+                <span className={`font-mono ${weeklyProfit > 0 ? 'text-green-600' : weeklyProfit < 0 ? 'text-red-600' : ''}`}>
+                  {formatIndianCurrency(weeklyProfit)}
+                </span>
+                {weeklyProfit !== 0 && (
+                  weeklyProfit > 0 
+                    ? <TrendingUp className="h-4 w-4 text-green-600" />
+                    : <TrendingDown className="h-4 w-4 text-red-600" />
+                )}
+              </div>
+            </div>
+          </CardContent>
         </Card>
       </div>
 
-      {/* Detailed Transactions */}
-      <div className="space-y-4">
-        <h3 className="font-semibold">Transaction Details</h3>
+      {/* Transaction Details */}
+      <div>
+        <h3 className="text-lg font-medium mb-4">Transaction Details</h3>
         <Tabs defaultValue="all">
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="buy">Buy</TabsTrigger>
             <TabsTrigger value="sell">Sell</TabsTrigger>
           </TabsList>
-
           <TabsContent value="all">
-            <TransactionTable 
-              transactions={weeklyTransactions}
-              metal={metal}
-            />
+            <TransactionTable transactions={transactions} metal={metal} />
           </TabsContent>
-
           <TabsContent value="buy">
-            <TransactionTable 
-              transactions={buyTransactions}
-              metal={metal}
-            />
+            <TransactionTable transactions={weeklyBuyTransactions} metal={metal} />
           </TabsContent>
-
           <TabsContent value="sell">
-            <TransactionTable 
-              transactions={sellTransactions}
-              metal={metal}
-            />
+            <TransactionTable transactions={weeklySellTransactions} metal={metal} />
           </TabsContent>
         </Tabs>
       </div>
-
-      {/* Rate Analysis */}
-      <Card className="p-4">
-        <h3 className="font-semibold mb-4">Rate Analysis</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <h4 className="text-sm text-muted-foreground">Buy Rates</h4>
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span>Average Rate:</span>
-                <span className="font-mono">
-                  {metal === "gold" 
-                    ? formatIndianCurrency(summary.averageBuyRate * 10)
-                    : formatIndianCurrency(summary.averageBuyRate)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Total Value:</span>
-                <span className="font-mono">{formatIndianCurrency(summary.totalBuyValue)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="text-sm text-muted-foreground">Sell Rates</h4>
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <span>Average Rate:</span>
-                <span className="font-mono">
-                  {metal === "gold" 
-                    ? formatIndianCurrency(summary.averageSellRate * 10)
-                    : formatIndianCurrency(summary.averageSellRate)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Total Value:</span>
-                <span className="font-mono">{formatIndianCurrency(summary.totalSellValue)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Card>
     </div>
   );
 };
@@ -249,15 +254,15 @@ const TransactionTable: React.FC<{
             <TableCell>{format(parseISO(transaction.date), "dd/MM/yyyy")}</TableCell>
             <TableCell className="capitalize">{transaction.type}</TableCell>
             <TableCell className="text-right font-mono">
-              {transaction.weight.toFixed(2)}g
+              {formatWeight(transaction.weight, metal)}
             </TableCell>
             <TableCell className="text-right font-mono">
               {metal === "gold" 
-                ? formatIndianCurrency(transaction.price * 10)
+                ? formatIndianCurrency(transaction.price)
                 : formatIndianCurrency(transaction.price)}
             </TableCell>
             <TableCell className="text-right font-mono">
-              {formatIndianCurrency(transaction.weight * transaction.price)}
+              {formatIndianCurrency(calculateTotal(transaction, metal))}
             </TableCell>
             <TableCell className="text-right">
               {transaction.type === "sell" && transaction.profit ? (

@@ -25,11 +25,7 @@ export const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
 }) => {
   const { toast } = useToast();
   const [weight, setWeight] = React.useState(transaction.weight.toString());
-  const [price, setPrice] = React.useState(
-    transaction.metal === "gold" 
-      ? (transaction.price * 10).toString() 
-      : transaction.price.toString()
-  );
+  const [price, setPrice] = React.useState(transaction.price.toString());
   const [date, setDate] = React.useState<Date>(new Date(transaction.date));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,15 +44,13 @@ export const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
       const weightValue = parseFloat(weight);
       const priceValue = parseFloat(price);
 
-      // For gold, convert the per-10g price to per-gram price
-      const adjustedPrice = transaction.metal === "gold" ? priceValue / 10 : priceValue;
-
+      // Store price exactly as entered (per 10g for gold, per kg for silver)
       const updatedTransaction: Transaction = {
         id: transaction.id,
         type: transaction.type,
         metal: transaction.metal,
         weight: weightValue,
-        price: adjustedPrice,
+        price: priceValue,
         date: date.toISOString(),
         remainingWeight: transaction.type === "buy" ? weightValue : 0,
         soldFrom: transaction.soldFrom || [],
@@ -108,7 +102,7 @@ export const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
             step="0.01"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
-            placeholder="Enter quantity"
+            placeholder={`Enter quantity (${transaction.metal === "gold" ? "g" : "kg"})`}
           />
         </div>
 
@@ -120,7 +114,7 @@ export const EditTransactionForm: React.FC<EditTransactionFormProps> = ({
             step="0.01"
             value={price}
             onChange={(e) => setPrice(e.target.value)}
-            placeholder="Enter rate"
+            placeholder={`Rate per ${transaction.metal === "gold" ? "10g" : "kg"}`}
           />
         </div>
       </div>

@@ -173,7 +173,7 @@ const Index = () => {
     },
   });
 
-  const calculateFIFO = (sellTransaction: Transaction): Transaction => {
+  const calculateFIFO = async (sellTransaction: Transaction): Promise<Transaction> => {
     if (sellTransaction.type !== "sell") return sellTransaction;
 
     const metalTransactions = transactions.filter(t => t.metal === sellTransaction.metal);
@@ -196,6 +196,14 @@ const Index = () => {
         totalCost += used * buyTx.price;
         soldFrom.push(buyTx.id);
         remainingToSell -= used;
+
+        // Update the remaining weight of the buy transaction
+        const { error } = await supabase
+          .from('transactions')
+          .update({ remaining_weight: available - used })
+          .eq('id', buyTx.id);
+
+        if (error) throw error;
       }
     }
 
@@ -211,46 +219,21 @@ const Index = () => {
 
   const handleAddTransaction = async (transaction: Transaction) => {
     try {
-      // For sell transactions, check inventory first
+      // For sell transactions
       if (transaction.type === "sell") {
         const metalTransactions = transactions.filter(t => t.metal === transaction.metal);
-        const totalBuyWeight = metalTransactions
-          .filter(t => t.type === "buy")
-          .reduce((acc, curr) => acc + (curr.remainingWeight || 0), 0);
+        // Sort buy transactions by price ascending (lowest price first)
+        const availableBuyTransactions = metalTransactions
+          .filter(t => t.type === "buy" && (t.remainingWeight || 0) > 0)
+          .sort((a, b) => a.price - b.price);
 
-        if (transaction.weight > totalBuyWeight) {
-          toast({
-            title: "Cannot Add Sale",
-            description: `You only have ${totalBuyWeight.toFixed(2)} of ${transaction.metal} in stock. Cannot sell ${transaction.weight.toFixed(2)}.`,
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-
-      const processedTransaction = calculateFIFO(transaction);
-      
-      // For buy transactions, set the initial remaining weight
-      if (transaction.type === "buy") {
-        processedTransaction.remainingWeight = transaction.weight;
-      }
-
-      // Wait for the main transaction to be added
-      await addTransactionMutation.mutateAsync(processedTransaction);
-
-      // If it's a sell transaction, update the remaining weights of buy transactions
-      if (transaction.type === "sell") {
+        // First use up any available stock using FIFO (lowest price first)
         let remainingToSell = transaction.weight;
-        const availableBuyTransactions = [...transactions]
-          .filter(
-            (t) =>
-              t.type === "buy" &&
-              t.metal === transaction.metal &&
-              (t.remainingWeight || 0) > 0 &&
-              t.id
-          )
-          .sort((a, b) => a.price - b.price); // Sort by price ascending (lowest price first)
+        let totalCost = 0;
+        const soldFrom: string[] = [];
+        let profit = 0;
 
+        // Process available buys first
         for (const buyTx of availableBuyTransactions) {
           if (remainingToSell <= 0) break;
           if (!buyTx.id) continue;
@@ -259,29 +242,119 @@ const Index = () => {
           const used = Math.min(available, remainingToSell);
           
           if (used > 0) {
-            // Update remaining weight in database
+            totalCost += used * buyTx.price;
+            soldFrom.push(buyTx.id);
+            remainingToSell -= used;
+
+            // Update the remaining weight of the buy transaction
             const { error } = await supabase
               .from('transactions')
               .update({ remaining_weight: available - used })
               .eq('id', buyTx.id);
 
-            if (error) {
-              toast({
-                title: "Error Updating Stock",
-                description: "Could not update remaining stock. Please refresh and try again.",
-                variant: "destructive",
-              });
-              throw error;
-            }
+            if (error) throw error;
+          }
+        }
 
-            remainingToSell -= used;
+        // Calculate profit for the covered portion
+        if (soldFrom.length > 0) {
+          const coveredWeight = transaction.weight - remainingToSell;
+          profit = (coveredWeight * transaction.price) - totalCost;
+        }
+
+        // Add the sell transaction
+        await addTransactionMutation.mutateAsync({
+          ...transaction,
+          remainingWeight: 0,
+          soldFrom,
+          profit
+        });
+      } else {
+        // For buy transactions
+        const metalTransactions = transactions.filter(t => t.metal === transaction.metal);
+        
+        // Get all uncovered or partially covered short sells, sorted by price ascending (lowest first)
+        const shortSellTransactions = metalTransactions
+          .filter(t => t.type === "sell")
+          .map(sellTx => {
+            // Calculate how much of this sell is already covered
+            const coveredWeight = metalTransactions
+              .filter(t => t.type === "buy" && sellTx.soldFrom?.includes(t.id || ''))
+              .reduce((acc, buyTx) => {
+                const buyWeight = Math.min(buyTx.weight, sellTx.weight);
+                return acc + buyWeight;
+              }, 0);
+            
+            return {
+              ...sellTx,
+              uncoveredWeight: sellTx.weight - coveredWeight
+            };
+          })
+          .filter(t => t.uncoveredWeight > 0)
+          // Sort by price ascending (lowest first)
+          .sort((a, b) => a.price - b.price);
+
+        // First add the buy transaction to get its ID
+        const { data: newBuy } = await supabase
+          .from('transactions')
+          .insert([{
+            ...transaction,
+            profile: currentProfile,
+            remaining_weight: transaction.weight,
+            sold_from: []
+          }])
+          .select()
+          .single();
+
+        if (!newBuy || !newBuy.id) throw new Error("Failed to add buy transaction");
+
+        if (shortSellTransactions.length > 0) {
+          // We have short positions to cover
+          let remainingBuyWeight = transaction.weight;
+
+          for (const sellTx of shortSellTransactions) {
+            if (remainingBuyWeight <= 0) break;
+
+            const coverAmount = Math.min(remainingBuyWeight, sellTx.uncoveredWeight);
+            
+            if (coverAmount > 0) {
+              // Get existing soldFrom array
+              const existingSoldFrom = sellTx.soldFrom || [];
+              
+              // Calculate profit for this covered portion
+              const profit = coverAmount * (sellTx.price - transaction.price);
+              
+              // Update the sell transaction with the profit and link to this buy
+              const { error: sellError } = await supabase
+                .from('transactions')
+                .update({ 
+                  profit: (sellTx.profit || 0) + profit,
+                  sold_from: [...existingSoldFrom, newBuy.id]
+                })
+                .eq('id', sellTx.id);
+
+              if (sellError) throw sellError;
+
+              remainingBuyWeight -= coverAmount;
+
+              // Update the remaining weight of the buy transaction
+              const { error: buyError } = await supabase
+                .from('transactions')
+                .update({ 
+                  remaining_weight: remainingBuyWeight
+                })
+                .eq('id', newBuy.id);
+
+              if (buyError) throw buyError;
+            }
           }
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['transactions', currentProfile] });
+      // Refresh the data after transaction
+      await queryClient.invalidateQueries({ queryKey: ['transactions', currentProfile] });
     } catch (error) {
-      console.error('Error adding transaction:', error);
+      console.error("Failed to add transaction:", error);
       toast({
         title: "Error",
         description: "Failed to add transaction. Please try again.",
